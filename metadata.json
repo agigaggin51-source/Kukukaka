@@ -1,0 +1,6 @@
+{
+  "name": "Chess Master - Stockfish Analysis & Brilliant Moves",
+  "description": "Full-featured interactive Chess platform featuring Stockfish AI engine levels, real-time evaluation bar, opening guide with ECO book, brilliant move detection, and game quality analysis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
