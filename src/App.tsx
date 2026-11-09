@@ -61,6 +61,7 @@ import { detectOpening } from './lib/openings';
 import { findBestMove, evaluateBoard } from './lib/engine';
 import { classifyMove, summarizeAnalysis } from './lib/analysis';
 import { engineService } from './lib/engineWorkerService';
+import { calculateEloOnWin } from './lib/elo';
 
 export default function App() {
   // Game instance & history
@@ -105,6 +106,9 @@ export default function App() {
     isOpen: boolean;
     winner: 'w' | 'b' | 'draw' | null;
     reason: string;
+    isUserWinner?: boolean;
+    eloChange?: number | null;
+    newElo?: number | null;
   }>({ isOpen: false, winner: null, reason: '' });
 
   // Cloud & Leaderboard modals
@@ -372,20 +376,61 @@ export default function App() {
       const winner = c.turn() === 'w' ? 'b' : 'w';
       const winnerName = winner === 'w' ? 'White' : 'Black';
       sounds.playGameOver();
+
+      let isUserWinner = false;
+      if (mode === 'vs-ai') {
+        isUserWinner = winner === userSide;
+      } else if (mode === 'online-multiplayer') {
+        isUserWinner = winner === onlineMyColor;
+      }
+
+      let eloChange = 0;
+      let newElo = currentUser?.rating || 1500;
+
+      if (isUserWinner) {
+        newElo = calculateEloOnWin(currentUser?.rating || 1500);
+        eloChange = newElo - (currentUser?.rating || 1500);
+        if (currentUser) {
+          const updated = { ...currentUser, rating: newElo };
+          setCurrentUser(updated);
+          try {
+            localStorage.setItem('wchess_user_session', JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+        }
+      } else {
+        eloChange = -15;
+        newElo = Math.max(800, (currentUser?.rating || 1500) - 15);
+        if (currentUser) {
+          const updated = { ...currentUser, rating: newElo };
+          setCurrentUser(updated);
+          try {
+            localStorage.setItem('wchess_user_session', JSON.stringify(updated));
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       setGameOverModal({
         isOpen: true,
         winner,
-        reason: `Checkmate! ${winnerName} won the match.`,
+        reason: isUserWinner
+          ? `Skakmat! Anda memenangkan pertandingan secara gemilang!`
+          : `Checkmate! ${winnerName} won the match.`,
+        isUserWinner,
+        eloChange,
+        newElo,
       });
+
       if (mode === 'vs-ai') {
-        const isUserWinner = winner === userSide;
         recordMatchResult({
           player_name: currentUser ? currentUser.name : 'Tamu Master',
           result: isUserWinner ? 'win' : 'loss',
           opponent: `Stockfish Level ${aiLevel}`,
         });
       } else if (mode === 'online-multiplayer') {
-        const isUserWinner = winner === onlineMyColor;
         recordMatchResult({
           player_name: currentUser ? currentUser.name : 'Anda',
           result: isUserWinner ? 'win' : 'loss',
@@ -401,11 +446,28 @@ export default function App() {
       else if (c.isThreefoldRepetition()) reason = 'Draw by threefold repetition.';
       else if (c.isInsufficientMaterial()) reason = 'Draw by insufficient material.';
       sounds.playGameOver();
+
+      const eloChange = 5;
+      const newElo = (currentUser?.rating || 1500) + eloChange;
+      if (currentUser) {
+        const updated = { ...currentUser, rating: newElo };
+        setCurrentUser(updated);
+        try {
+          localStorage.setItem('wchess_user_session', JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+      }
+
       setGameOverModal({
         isOpen: true,
         winner: 'draw',
         reason,
+        isUserWinner: false,
+        eloChange,
+        newElo,
       });
+
       if (mode === 'vs-ai') {
         recordMatchResult({
           player_name: currentUser ? currentUser.name : 'Tamu Master',
@@ -1634,6 +1696,9 @@ export default function App() {
         isOpen={gameOverModal.isOpen}
         winner={gameOverModal.winner}
         reason={gameOverModal.reason}
+        isUserWinner={gameOverModal.isUserWinner}
+        eloChange={gameOverModal.eloChange}
+        newElo={gameOverModal.newElo}
         onNewGame={handleResetGame}
         onReview={() => {
           setGameOverModal({ isOpen: false, winner: null, reason: '' });

@@ -215,4 +215,27 @@ test('RBAC: Route Guard strictly permits admin and rejects regular users/guests'
   assert.equal(canAccessAdminDashboard(null, '#game'), true, 'Guest can access normal routes');
 });
 
+import { calculateEloOnWin } from './elo';
+
+test('Elo Calculation: calculateEloOnWin awards +50 for beginner (Elo < 1000)', () => {
+  assert.equal(calculateEloOnWin(800), 850);
+  assert.equal(calculateEloOnWin(950), 1000);
+  assert.equal(calculateEloOnWin(0), 50);
+});
+
+test('Elo Calculation: calculateEloOnWin scales dynamically between 15 and 25 for Elo >= 1000', () => {
+  // At 1000: gain = 25 - 0 = 25 -> 1025
+  assert.equal(calculateEloOnWin(1000), 1025);
+  // At 1100: gain = 25 - 1 = 24 -> 1124
+  assert.equal(calculateEloOnWin(1100), 1124);
+  // At 1500: gain = 25 - 5 = 20 -> 1520
+  assert.equal(calculateEloOnWin(1500), 1520);
+  // At 2000: gain = 25 - 10 = 15 -> 2015
+  assert.equal(calculateEloOnWin(2000), 2015);
+  // At 2500+: gain = min 15 -> 2515
+  assert.equal(calculateEloOnWin(2500), 2515);
+  assert.equal(calculateEloOnWin(3000), 3015);
+});
+
+
 

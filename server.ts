@@ -845,11 +845,25 @@ app.post('/api/cloud/leaderboard/record-match', async (req: Request, res: Respon
     MEMORY_LEADERBOARD.push(existing);
   }
 
-  const ratingChange = result === 'win' ? 25 : result === 'draw' ? 5 : -15;
-  existing.rating = Math.max(800, existing.rating + ratingChange);
-  if (result === 'win') existing.wins += 1;
-  else if (result === 'loss') existing.losses += 1;
-  else existing.draws += 1;
+  let ratingChange = 0;
+  if (result === 'win') {
+    // Elo < 1000: +50 gain; Elo >= 1000: dynamically scales 25 down to 15 based on (Elo - 1000) / 100
+    const eloGain = existing.rating < 1000
+      ? 50
+      : Math.max(15, 25 - Math.floor((existing.rating - 1000) / 100));
+    ratingChange = eloGain;
+    existing.rating += ratingChange;
+    existing.wins += 1;
+    console.log(`Elo Update: ${existing.player_name} | Menang! (+${ratingChange} Elo) | Elo Baru: ${existing.rating}`);
+  } else if (result === 'loss') {
+    ratingChange = -15;
+    existing.rating = Math.max(800, existing.rating + ratingChange);
+    existing.losses += 1;
+  } else {
+    ratingChange = 5;
+    existing.rating += ratingChange;
+    existing.draws += 1;
+  }
 
   if (tactics_points) {
     existing.tactics_score += tactics_points;
@@ -1235,6 +1249,11 @@ app.post('/api/admin/log-route-violation', (req: Request, res: Response) => {
 // -------------------------------------------------------------
 async function startServer() {
   const isProduction = process.env.NODE_ENV === 'production';
+
+  // Serve standalone mobile home preview HTML page
+  app.get('/mobile-home.html', (_req: Request, res: Response) => {
+    res.sendFile(path.resolve(__dirname, 'public', 'mobile-home.html'));
+  });
 
   if (!isProduction) {
     // Development mode: hook Vite into Express middlewares
