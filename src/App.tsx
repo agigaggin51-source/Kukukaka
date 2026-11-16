@@ -32,7 +32,6 @@ import { EvalBar } from './components/EvalBar';
 import { PlayerBox } from './components/PlayerBox';
 import { Sidebar } from './components/Sidebar';
 import { EvalPoint } from './components/EvalGraph';
-import { BrilliantModal } from './components/BrilliantModal';
 import { GameOverModal } from './components/GameOverModal';
 import { GameReviewModal } from './components/GameReviewModal';
 import { PuzzleTrainer } from './components/PuzzleTrainer';
@@ -61,7 +60,8 @@ import { detectOpening } from './lib/openings';
 import { findBestMove, evaluateBoard } from './lib/engine';
 import { classifyMove, summarizeAnalysis } from './lib/analysis';
 import { engineService } from './lib/engineWorkerService';
-import { calculateEloOnWin } from './lib/elo';
+import { calculateEloOnWin, updateUserEloInSupabase, DEFAULT_STARTING_ELO } from './lib/elo';
+import { saveMatchToSupabase } from './lib/matchHistory';
 
 export default function App() {
   // Game instance & history
@@ -95,13 +95,6 @@ export default function App() {
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
   // Modals & alerts
-  const [brilliantModalData, setBrilliantModalData] = useState<{
-    isOpen: boolean;
-    moveSan: string;
-    explanation?: string;
-  }>({ isOpen: false, moveSan: '' });
-
-  const [brilliantSquare, setBrilliantSquare] = useState<Square | null>(null);
   const [gameOverModal, setGameOverModal] = useState<{
     isOpen: boolean;
     winner: 'w' | 'b' | 'draw' | null;
@@ -311,12 +304,22 @@ export default function App() {
     });
   }, [historySans, analyzedMoves, engineResult]);
 
-  // Run engine evaluation asynchronously in Web Worker without blocking UI
+  // Performance & Anti-Lag Optimization:
+  // Disable real-time Stockfish engine evaluation during live 1v1 online matches.
+  // Enable Stockfish live evaluation ONLY in vs-ai, analysis, or review mode with fast movetime (300ms).
   useEffect(() => {
+    const isLiveStockfishAllowed =
+      mode === 'vs-ai' || mode === 'analysis' || activeTab === 'review';
+
+    if (!isLiveStockfishAllowed) {
+      setEngineResult(null);
+      return;
+    }
+
     let active = true;
     const currentFen = chess.fen();
 
-    engineService.evaluatePositionAsync(currentFen, Math.min(aiLevel, 3)).then((res) => {
+    engineService.evaluatePositionAsync(currentFen, Math.min(aiLevel, 3), 300).then((res) => {
       if (active) {
         setEngineResult(res);
       }
@@ -325,7 +328,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [chess, aiLevel]);
+  }, [chess, aiLevel, mode, activeTab]);
 
   // Chess clocks countdown timer
   useEffect(() => {
@@ -385,14 +388,16 @@ export default function App() {
       }
 
       let eloChange = 0;
-      let newElo = currentUser?.rating || 1500;
+      const initialElo = currentUser?.rating || DEFAULT_STARTING_ELO;
+      let newElo = initialElo;
 
       if (isUserWinner) {
-        newElo = calculateEloOnWin(currentUser?.rating || 1500);
-        eloChange = newElo - (currentUser?.rating || 1500);
+        newElo = calculateEloOnWin(initialElo);
+        eloChange = newElo - initialElo;
         if (currentUser) {
           const updated = { ...currentUser, rating: newElo };
           setCurrentUser(updated);
+          void updateUserEloInSupabase(currentUser.id, newElo);
           try {
             localStorage.setItem('wchess_user_session', JSON.stringify(updated));
           } catch {
@@ -401,10 +406,11 @@ export default function App() {
         }
       } else {
         eloChange = -15;
-        newElo = Math.max(800, (currentUser?.rating || 1500) - 15);
+        newElo = Math.max(100, initialElo - 15);
         if (currentUser) {
           const updated = { ...currentUser, rating: newElo };
           setCurrentUser(updated);
+          void updateUserEloInSupabase(currentUser.id, newElo);
           try {
             localStorage.setItem('wchess_user_session', JSON.stringify(updated));
           } catch {
@@ -436,6 +442,20 @@ export default function App() {
           result: isUserWinner ? 'win' : 'loss',
           opponent: onlineOpponent?.name || 'Lawan Online',
         });
+
+        // Simpan ke tabel matches di Supabase
+        const p1 = onlineMyRole === 'host' ? (currentUser?.id || 'host-user') : (onlineOpponent?.id || 'host-user');
+        const p2 = onlineMyRole === 'guest' ? (currentUser?.id || 'guest-user') : (onlineOpponent?.id || 'guest-user');
+        void saveMatchToSupabase({
+          player1_id: p1,
+          player2_id: p2,
+          result: winner === 'w' ? '1-0' : '0-1',
+          status: 'completed',
+          fen: c.fen(),
+          mode: 'online-1v1',
+          time_control: `${timeControlMinutes}+0`,
+          total_moves: historySans.length,
+        });
       }
       return true;
     }
@@ -448,10 +468,12 @@ export default function App() {
       sounds.playGameOver();
 
       const eloChange = 5;
-      const newElo = (currentUser?.rating || 1500) + eloChange;
+      const initialElo = currentUser?.rating || DEFAULT_STARTING_ELO;
+      const newElo = initialElo + eloChange;
       if (currentUser) {
         const updated = { ...currentUser, rating: newElo };
         setCurrentUser(updated);
+        void updateUserEloInSupabase(currentUser.id, newElo);
         try {
           localStorage.setItem('wchess_user_session', JSON.stringify(updated));
         } catch {
@@ -479,6 +501,19 @@ export default function App() {
           player_name: currentUser ? currentUser.name : 'Anda',
           result: 'draw',
           opponent: onlineOpponent?.name || 'Lawan Online',
+        });
+
+        const p1 = onlineMyRole === 'host' ? (currentUser?.id || 'host-user') : (onlineOpponent?.id || 'host-user');
+        const p2 = onlineMyRole === 'guest' ? (currentUser?.id || 'guest-user') : (onlineOpponent?.id || 'guest-user');
+        void saveMatchToSupabase({
+          player1_id: p1,
+          player2_id: p2,
+          result: '1/2-1/2',
+          status: 'completed',
+          fen: c.fen(),
+          mode: 'online-1v1',
+          time_control: `${timeControlMinutes}+0`,
+          total_moves: historySans.length,
         });
       }
       return true;
@@ -532,19 +567,10 @@ export default function App() {
           setHistorySans((prev) => [...prev, moveResult.san]);
           setCurrentStepIndex((prev) => prev + 1);
 
-          // Asynchronously classify move in worker
+          // Asynchronously classify move in worker for review
           const moveNumber = historySans.length + 1;
           engineService.classifyMoveAsync(targetFen, fenAfter, moveResult.san, moveNumber).then((analyzed) => {
             setAnalyzedMoves((prev) => [...prev, analyzed]);
-            if (analyzed.classification === 'brilliant') {
-              setBrilliantSquare(to);
-              sounds.playBrilliant();
-              setBrilliantModalData({
-                isOpen: true,
-                moveSan: moveResult.san,
-                explanation: analyzed.explanation,
-              });
-            }
           });
 
           checkGameOverState(nextChess);
@@ -556,40 +582,61 @@ export default function App() {
     [userSide, aiLevel, historySans.length, checkGameOverState]
   );
 
-  // Handle opponent move incoming from Supabase Realtime channel
+  // Handle opponent move incoming from Supabase Realtime channel (Anti-Freezing & Safe Desync Recovery)
   const handleOpponentOnlineMove = useCallback(
     (payload: OnlineMovePayload) => {
-      setChess((prevChess) => {
-        const nextChess = new Chess(prevChess.fen());
+      try {
+        let nextChess: Chess;
+        let moveSan = payload.san;
+        let isCapture = false;
+        let isCastle = false;
+
+        // 1. Validasi & eksekusi langkah dari FEN saat ini
         try {
-          const moveRes = nextChess.move({
+          const testChess = new Chess(chess.fen());
+          const res = testChess.move({
             from: payload.from as Square,
             to: payload.to as Square,
             promotion: (payload.promotion as PieceSymbol) || 'q',
           });
 
-          if (moveRes) {
-            if (nextChess.inCheck()) sounds.playCheck();
-            else if (moveRes.captured) sounds.playCapture();
-            else if (moveRes.flags.includes('k') || moveRes.flags.includes('q')) sounds.playCastle();
-            else sounds.playMove();
-
-            setLastMove({ from: payload.from as Square, to: payload.to as Square });
-            setHistoryFens((prev) => [...prev, nextChess.fen()]);
-            setHistorySans((prev) => [...prev, moveRes.san]);
-            setCurrentStepIndex((prev) => prev + 1);
-            setWhiteTime(payload.whiteTime);
-            setBlackTime(payload.blackTime);
-            setIsClockRunning(true);
-            checkGameOverState(nextChess);
+          if (res) {
+            nextChess = testChess;
+            moveSan = res.san;
+            isCapture = !!res.captured;
+            isCastle = res.flags.includes('k') || res.flags.includes('q');
+          } else {
+            // Fallback instan ke FEN lawan jika ada desinkronisasi, mencegah papan macet
+            nextChess = new Chess(payload.fen || chess.fen());
           }
-        } catch (err) {
-          console.warn('Gagal memproses langkah lawan:', err);
+        } catch {
+          // Fallback FEN resmi jika langkah gagal di-parse secara lokal
+          nextChess = new Chess(payload.fen || chess.fen());
         }
-        return nextChess;
-      });
+
+        // 2. Mainkan audio feedback
+        if (nextChess.inCheck()) sounds.playCheck();
+        else if (isCapture) sounds.playCapture();
+        else if (isCastle) sounds.playCastle();
+        else sounds.playMove();
+
+        // 3. Update state di luar reducer callback agar render cycle reaktif dan bebas freeze
+        setChess(nextChess);
+        setLastMove({ from: payload.from as Square, to: payload.to as Square });
+        setHistoryFens((prev) => [...prev, nextChess.fen()]);
+        setHistorySans((prev) => [...prev, moveSan]);
+        setCurrentStepIndex((prev) => prev + 1);
+        setWhiteTime(payload.whiteTime);
+        setBlackTime(payload.blackTime);
+        setIsClockRunning(true);
+
+        // 4. Periksa kondisi akhir laga
+        checkGameOverState(nextChess);
+      } catch (err) {
+        console.warn('[Realtime Online] Error pada sinkronisasi langkah lawan:', err);
+      }
     },
-    [checkGameOverState]
+    [chess, checkGameOverState]
   );
 
   const handleCreateOnlineRoom = async (
@@ -879,23 +926,14 @@ export default function App() {
 
       const isOver = checkGameOverState(nextChess);
 
-      // 2. Offload tactical move classification asynchronously to Web Worker
-      const moveNumber = newSans.length;
-      engineService.classifyMoveAsync(fenBefore, fenAfter, moveResult.san, moveNumber).then((analyzed) => {
-        setAnalyzedMoves((prev) => [...prev, analyzed]);
-
-        if (analyzed.classification === 'brilliant') {
-          setBrilliantSquare(to);
-          sounds.playBrilliant();
-          setBrilliantModalData({
-            isOpen: true,
-            moveSan: moveResult.san,
-            explanation: analyzed.explanation,
-          });
-        } else {
-          setBrilliantSquare(null);
-        }
-      });
+      // 2. Only run live tactical move classification in vs-ai or analysis mode.
+      // Disabled in 1v1 online multiplayer to eliminate lag and keep board sync instant.
+      if (mode === 'vs-ai' || mode === 'analysis') {
+        const moveNumber = newSans.length;
+        engineService.classifyMoveAsync(fenBefore, fenAfter, moveResult.san, moveNumber, 300).then((analyzed) => {
+          setAnalyzedMoves((prev) => [...prev, analyzed]);
+        });
+      }
 
       // 3. Trigger AI if vs-ai mode
       if (!isOver && mode === 'vs-ai') {
@@ -944,7 +982,6 @@ export default function App() {
     setCurrentStepIndex(newLength - 1);
     setChess(new Chess(newFens[newFens.length - 1]));
     setLastMove(null);
-    setBrilliantSquare(null);
   };
 
   // Reset Game
@@ -955,7 +992,6 @@ export default function App() {
     setHistorySans([]);
     setCurrentStepIndex(0);
     setLastMove(null);
-    setBrilliantSquare(null);
     setWhiteTime(timeControlMinutes * 60);
     setBlackTime(timeControlMinutes * 60);
     setIsClockRunning(false);
@@ -1004,17 +1040,13 @@ export default function App() {
         analyzedMoves,
         (current, total) => {
           setAnalysisProgress({ current, total });
-        }
+        },
+        300 // Fast 300ms movetime budget per uncached move for instant post-game review
       );
       setAnalyzedMoves(res.analyzedMoves);
       setAnalysisSummary(res.summary);
       setIsAnalyzing(false);
       setAnalysisProgress(null);
-
-      const firstBrilliant = res.analyzedMoves.find((m) => m.classification === 'brilliant');
-      if (firstBrilliant && !brilliantSquare) {
-        setBrilliantSquare(firstBrilliant.to as Square);
-      }
     } catch {
       setIsAnalyzing(false);
       setAnalysisProgress(null);
@@ -1092,7 +1124,6 @@ export default function App() {
     setHistorySans([]);
     setCurrentStepIndex(0);
     setLastMove(null);
-    setBrilliantSquare(null);
   }, []);
 
   const handleResetPuzzle = useCallback(() => {
@@ -1230,7 +1261,7 @@ export default function App() {
       if (col === userSide) {
         return {
           name: currentUser ? currentUser.name : 'You',
-          ratingText: currentUser?.rating ? String(currentUser.rating) : '1500',
+          ratingText: currentUser?.rating ? String(currentUser.rating) : String(DEFAULT_STARTING_ELO),
           isAi: false,
         };
       }
@@ -1276,23 +1307,23 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#161512] text-[#bababa] flex flex-col justify-between selection:bg-[#81b64c] selection:text-black">
       {/* Header Navigation */}
-      <header className="bg-[#262421] border-b border-neutral-800 px-3 sm:px-6 py-2.5 flex items-center justify-between shadow-md">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 font-black text-xl tracking-wide text-white">
-            <span className="w-8 h-8 rounded-lg bg-[#81b64c] text-[#1c3308] flex items-center justify-center font-bold text-lg shadow">
+      <header className="bg-[#262421] border-b border-neutral-800 px-3 sm:px-5 py-2.5 flex items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex items-center gap-2 font-black text-xl tracking-wide text-white whitespace-nowrap">
+            <span className="w-8 h-8 rounded-lg bg-[#81b64c] text-[#1c3308] flex items-center justify-center font-bold text-lg shadow shrink-0">
               W
             </span>
             <span className="font-bold">
               W <span className="text-[#81b64c]">Chess</span>
             </span>
           </div>
-          <span className="bg-[#1e1c18] text-xs px-2.5 py-0.5 rounded-md text-neutral-400 font-mono hidden md:inline-block border border-neutral-800">
+          <span className="bg-[#1e1c18] text-xs px-2.5 py-0.5 rounded-md text-neutral-400 font-mono hidden xl:inline-block border border-neutral-800 whitespace-nowrap">
             Stockfish + Arena Taktik
           </span>
         </div>
 
         {/* Mode Select Buttons */}
-        <div className="flex items-center gap-1 sm:gap-1.5 bg-[#1e1c18] p-1 rounded-xl border border-neutral-800 overflow-x-auto max-w-[65vw] sm:max-w-none">
+        <div className="flex items-center gap-1 sm:gap-1.5 bg-[#1e1c18] p-1 rounded-xl border border-neutral-800 overflow-x-auto min-w-0">
           <button
             onClick={() => {
               setIsOnlineLobbyOpen(true);
@@ -1382,7 +1413,7 @@ export default function App() {
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
           {/* Supabase Cloud Storage Button */}
           <button
             onClick={() => setIsCloudModalOpen(true)}
@@ -1513,12 +1544,14 @@ export default function App() {
 
           {/* Board + Eval Bar Row */}
           <div className="flex w-full gap-2 sm:gap-3 my-1 sm:my-2 justify-center items-stretch h-[340px] sm:h-[500px] lg:h-[580px]">
-            {/* Stockfish Evaluation Bar */}
-            <EvalBar
-              evaluation={engineResult?.evaluation || 0}
-              mateIn={engineResult?.mateIn}
-              isFlipped={isFlipped}
-            />
+            {/* Stockfish Evaluation Bar - hidden during live 1v1 online play to keep board light & distraction-free */}
+            {(mode !== 'online-multiplayer' || activeTab === 'review' || chess.isGameOver()) && (
+              <EvalBar
+                evaluation={engineResult?.evaluation || 0}
+                mateIn={engineResult?.mateIn}
+                isFlipped={isFlipped}
+              />
+            )}
 
             {/* Main Chess Board */}
             <div className="h-full aspect-square flex justify-center">
@@ -1661,13 +1694,6 @@ export default function App() {
             onToggleSound={setSoundEnabled}
             showBestMoveArrow={showBestMoveArrow}
             onToggleShowBestMoveArrow={setShowBestMoveArrow}
-            onShowBrilliantModal={(m) => {
-              setBrilliantModalData({
-                isOpen: true,
-                moveSan: m.san,
-                explanation: m.explanation,
-              });
-            }}
             whitePlayerName={getPlayerDetails('w').name}
             blackPlayerName={getPlayerDetails('b').name}
             onOpenSummaryModal={() => setIsGameReviewModalOpen(true)}
@@ -1681,16 +1707,10 @@ export default function App() {
         <span className="hidden sm:inline">•</span>
         <span className="text-[#81b64c] font-semibold">Opening Book: ECO Codes</span>
         <span className="hidden sm:inline">•</span>
-        <span className="text-[#26c2a3] font-semibold">Brilliant (!!) Sacrifice Detector</span>
+        <span className="text-neutral-400">Live Move Analysis & Accuracy</span>
       </footer>
 
       {/* Modals */}
-      <BrilliantModal
-        isOpen={brilliantModalData.isOpen}
-        onClose={() => setBrilliantModalData({ isOpen: false, moveSan: '' })}
-        moveSan={brilliantModalData.moveSan}
-        explanation={brilliantModalData.explanation}
-      />
 
       <GameOverModal
         isOpen={gameOverModal.isOpen}

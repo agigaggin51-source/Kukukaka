@@ -11,24 +11,24 @@ self.onmessage = (event: MessageEvent) => {
   try {
     switch (type) {
       case 'EVALUATE': {
-        const { fen, depth = 3 } = payload;
+        const { fen, depth = 3, movetimeMs = 300 } = payload;
         const chess = new Chess(fen);
-        const result = findBestMove(chess, depth);
+        const result = findBestMove(chess, depth, undefined, movetimeMs);
         self.postMessage({ type: 'EVALUATE_RESULT', id, result });
         break;
       }
 
       case 'AI_MOVE': {
-        const { fen, level = 3, recentFens } = payload;
+        const { fen, level = 3, recentFens, movetimeMs = 800 } = payload;
         const chess = new Chess(fen);
-        const result = findBestMove(chess, level, recentFens);
+        const result = findBestMove(chess, level, recentFens, movetimeMs);
         self.postMessage({ type: 'AI_MOVE_RESULT', id, result });
         break;
       }
 
       case 'CLASSIFY_MOVE': {
-        const { fenBefore, fenAfter, san, moveNumber } = payload;
-        const result = classifyMove(fenBefore, fenAfter, san, moveNumber);
+        const { fenBefore, fenAfter, san, moveNumber, movetimeMs = 300 } = payload;
+        const result = classifyMove(fenBefore, fenAfter, san, moveNumber, 2, movetimeMs);
         self.postMessage({ type: 'CLASSIFY_MOVE_RESULT', id, result });
         break;
       }
@@ -62,8 +62,9 @@ self.onmessage = (event: MessageEvent) => {
           if (cached && cached.san === san) {
             analyzedMoves.push(cached);
           } else {
-            // 2. Fast tactical analysis (depth 2) for uncached moves
-            const analyzed = classifyMove(fenBefore, fenAfter, san, moveNumber, 2);
+            // 2. Fast tactical analysis (depth 2, max 300ms movetime) for uncached moves
+            const movetimeMs = payload.movetimeMs ?? 300;
+            const analyzed = classifyMove(fenBefore, fenAfter, san, moveNumber, 2, movetimeMs);
             analyzedMoves.push(analyzed);
           }
 

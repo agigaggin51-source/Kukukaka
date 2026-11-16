@@ -297,7 +297,8 @@ function minimax(
   beta: number,
   isMaximizing: boolean,
   ply: number = 0,
-  recentFens?: Set<string>
+  recentFens?: Set<string>,
+  deadlineMs?: number
 ): { score: number; bestMove?: Move } {
   // Mate distance pruning: faster checkmates score higher, prolonged checkmates score lower
   if (chess.isCheckmate()) {
@@ -312,7 +313,7 @@ function minimax(
     return { score: 0 };
   }
 
-  if (depth === 0) {
+  if (depth === 0 || (deadlineMs && Date.now() >= deadlineMs)) {
     return { score: evaluateBoard(chess) };
   }
 
@@ -326,8 +327,9 @@ function minimax(
   if (isMaximizing) {
     let maxEval = -Infinity;
     for (const move of moves) {
+      if (deadlineMs && Date.now() >= deadlineMs) break;
       chess.move(move);
-      const res = minimax(chess, depth - 1, alpha, beta, false, ply + 1, recentFens);
+      const res = minimax(chess, depth - 1, alpha, beta, false, ply + 1, recentFens, deadlineMs);
       chess.undo();
 
       // Repetition penalty in winning position to prevent endless piece shuffling
@@ -346,12 +348,13 @@ function minimax(
       alpha = Math.max(alpha, effectiveScore);
       if (beta <= alpha) break; // Beta cutoff
     }
-    return { score: maxEval, bestMove };
+    return { score: maxEval === -Infinity ? evaluateBoard(chess) : maxEval, bestMove };
   } else {
     let minEval = Infinity;
     for (const move of moves) {
+      if (deadlineMs && Date.now() >= deadlineMs) break;
       chess.move(move);
-      const res = minimax(chess, depth - 1, alpha, beta, true, ply + 1, recentFens);
+      const res = minimax(chess, depth - 1, alpha, beta, true, ply + 1, recentFens, deadlineMs);
       chess.undo();
 
       let effectiveScore = res.score;
@@ -369,7 +372,7 @@ function minimax(
       beta = Math.min(beta, effectiveScore);
       if (beta <= alpha) break; // Alpha cutoff
     }
-    return { score: minEval, bestMove };
+    return { score: minEval === Infinity ? evaluateBoard(chess) : minEval, bestMove };
   }
 }
 
@@ -395,23 +398,33 @@ function findInstantMateInOne(chess: Chess): Move | null {
  * If any legal move guarantees a checkmate on the next turn against all opponent replies,
  * return that move immediately to prevent delay and piece shuffling.
  */
-function findInstantMateInTwo(chess: Chess): { candidate: Move; pv: string[] } | null {
+function findInstantMateInTwo(chess: Chess, deadlineMs?: number): { candidate: Move; pv: string[] } | null {
   const legalMoves = chess.moves({ verbose: true });
-  // Prioritize checks and captures first
+  // Prioritize checks first, then captures
   const sorted = legalMoves.slice().sort((a, b) => {
-    const aCheck = a.san.includes('+') ? 1 : 0;
-    const bCheck = b.san.includes('+') ? 1 : 0;
+    const aCheck = a.san.includes('+') ? 2 : a.captured ? 1 : 0;
+    const bCheck = b.san.includes('+') ? 2 : b.captured ? 1 : 0;
     return bCheck - aCheck;
   });
 
-  for (const candidate of sorted) {
+  // In complex middlegames (many legal moves), only scan forcing moves (checks/captures)
+  // to avoid O(N^3) blowup unless in simplified/endgame positions.
+  const candidatesToScan =
+    sorted.length > 16 ? sorted.filter((m) => m.san.includes('+') || m.captured) : sorted;
+
+  for (const candidate of candidatesToScan) {
+    if (deadlineMs && Date.now() >= deadlineMs) break;
     chess.move(candidate);
     const replies = chess.moves({ verbose: true });
-    if (replies.length > 0) {
+    if (replies.length > 0 && replies.length <= 25) {
       let allRepliesMated = true;
       let samplePv: string[] = [];
 
       for (const reply of replies) {
+        if (deadlineMs && Date.now() >= deadlineMs) {
+          allRepliesMated = false;
+          break;
+        }
         chess.move(reply);
         const counterMoves = chess.moves({ verbose: true });
         const killerMate = counterMoves.find((cm) => {
@@ -446,7 +459,8 @@ function findInstantMateInTwo(chess: Chess): { candidate: Move; pv: string[] } |
 export function findBestMove(
   chessInstance: Chess,
   depth: number = 3,
-  recentFens?: string[]
+  recentFens?: string[],
+  movetimeMs: number = 300
 ): EngineResult {
   const clone = new Chess(chessInstance.fen());
   const isWhite = clone.turn() === 'w';
@@ -461,6 +475,8 @@ export function findBestMove(
       pv: [],
     };
   }
+
+  const deadlineMs = movetimeMs > 0 ? Date.now() + movetimeMs : undefined;
 
   // -----------------------------------------------------------------
   // 1. TACTICAL MATE-IN-1: Checked immediately at ALL levels
@@ -478,9 +494,9 @@ export function findBestMove(
   }
 
   // -----------------------------------------------------------------
-  // 2. TACTICAL FORCED MATE-IN-2: Fast execution check
+  // 2. TACTICAL FORCED MATE-IN-2: Fast execution check (bounded by deadlineMs)
   // -----------------------------------------------------------------
-  const instantMate2 = findInstantMateInTwo(clone);
+  const instantMate2 = findInstantMateInTwo(clone, deadlineMs);
   if (instantMate2) {
     return {
       bestMove:
@@ -539,8 +555,8 @@ export function findBestMove(
     }
   }
 
-  // Execute Alpha-Beta Minimax search
-  const result = minimax(clone, searchDepth, -Infinity, Infinity, isWhite, 0, recentFenSet);
+  // Execute Alpha-Beta Minimax search bounded by movetimeMs
+  const result = minimax(clone, searchDepth, -Infinity, Infinity, isWhite, 0, recentFenSet, deadlineMs);
 
   let bestMove = result.bestMove || legalMoves[0];
 

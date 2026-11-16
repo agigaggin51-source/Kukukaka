@@ -80,7 +80,7 @@ export const GameReviewPanel: React.FC<GameReviewPanelProps> = ({
   const filteredMoves = analyzedMoves.filter((m) => {
     if (filterMode === 'all') return true;
     if (filterMode === 'key') {
-      return ['brilliant', 'great', 'mistake', 'blunder'].includes(m.classification || '');
+      return ['great', 'mistake', 'blunder'].includes(m.classification || '');
     }
     if (filterMode === 'mistakes') {
       return ['inaccuracy', 'mistake', 'blunder'].includes(m.classification || '');

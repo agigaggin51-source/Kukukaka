@@ -63,7 +63,7 @@ class EngineWorkerService {
   /**
    * Request position evaluation with automatic debouncing / cancellation of older requests
    */
-  public evaluatePositionAsync(fen: string, depth = 3): Promise<EngineResult> {
+  public evaluatePositionAsync(fen: string, depth = 3, movetimeMs = 300): Promise<EngineResult> {
     const id = ++this.messageId;
     this.currentEvalRequestId = id;
 
@@ -80,7 +80,7 @@ class EngineWorkerService {
         this.worker.postMessage({
           type: 'EVALUATE',
           id,
-          payload: { fen, depth },
+          payload: { fen, depth, movetimeMs },
         });
       } else {
         // Fallback: Non-blocking async execution using setTimeout
@@ -88,7 +88,7 @@ class EngineWorkerService {
           if (this.currentEvalRequestId === id) {
             try {
               const chess = new Chess(fen);
-              const res = findBestMove(chess, depth);
+              const res = findBestMove(chess, depth, undefined, movetimeMs);
               resolve(res);
             } catch {
               resolve({ bestMove: '', bestMoveSan: '', evaluation: 0, depth, pv: [] });
@@ -137,7 +137,8 @@ class EngineWorkerService {
     fenBefore: string,
     fenAfter: string,
     san: string,
-    moveNumber: number
+    moveNumber: number,
+    movetimeMs = 300
   ): Promise<AnalyzedMove> {
     const id = ++this.messageId;
 
@@ -150,12 +151,12 @@ class EngineWorkerService {
         this.worker.postMessage({
           type: 'CLASSIFY_MOVE',
           id,
-          payload: { fenBefore, fenAfter, san, moveNumber },
+          payload: { fenBefore, fenAfter, san, moveNumber, movetimeMs },
         });
       } else {
         setTimeout(() => {
           try {
-            const res = classifyMove(fenBefore, fenAfter, san, moveNumber);
+            const res = classifyMove(fenBefore, fenAfter, san, moveNumber, 2, movetimeMs);
             resolve(res);
           } catch {
             resolve({
@@ -183,7 +184,8 @@ class EngineWorkerService {
   public runBatchAnalysisAsync(
     historySans: string[],
     cachedMoves?: AnalyzedMove[],
-    onProgress?: (current: number, total: number) => void
+    onProgress?: (current: number, total: number) => void,
+    movetimeMs = 300
   ): Promise<{ analyzedMoves: AnalyzedMove[]; summary: AnalysisSummary }> {
     const id = ++this.messageId;
 
@@ -204,7 +206,7 @@ class EngineWorkerService {
         this.worker.postMessage({
           type: 'RUN_BATCH_ANALYSIS',
           id,
-          payload: { historySans, cachedMoves },
+          payload: { historySans, cachedMoves, movetimeMs },
         });
       } else {
         setTimeout(() => {
@@ -232,7 +234,7 @@ class EngineWorkerService {
               if (cached && cached.san === san) {
                 analyzedMoves.push(cached);
               } else {
-                analyzedMoves.push(classifyMove(fenBefore, fenAfter, san, moveNumber, 2));
+                analyzedMoves.push(classifyMove(fenBefore, fenAfter, san, moveNumber, 2, movetimeMs));
               }
 
               if (onProgress) {

@@ -204,7 +204,7 @@ export const EvalGraph: React.FC<EvalGraphProps> = ({
             if (i === 0) return null; // skip initial position dot
             const sym = getClassificationSymbol(pt.point.classification);
             const isHighlight =
-              pt.point.classification === 'brilliant' ||
+              pt.point.classification === 'great' ||
               pt.point.classification === 'blunder' ||
               pt.point.classification === 'mistake';
 
@@ -219,10 +219,9 @@ export const EvalGraph: React.FC<EvalGraphProps> = ({
                   <circle
                     cx={pt.x}
                     cy={pt.y}
-                    r={sym?.symbol === '!!' ? 5.5 : 4.5}
+                    r={4.5}
                     fill={sym?.bgColor || '#81b64c'}
                     fillOpacity="0.4"
-                    className="animate-pulse"
                   />
                 )}
                 <circle

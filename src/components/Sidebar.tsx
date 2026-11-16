@@ -8,7 +8,6 @@ import {
   Wand2,
   Copy,
   Upload,
-  Gem,
   CheckCircle,
   AlertTriangle,
   XCircle,
@@ -79,7 +78,6 @@ interface SidebarProps {
   onToggleSound: (enabled: boolean) => void;
   showBestMoveArrow: boolean;
   onToggleShowBestMoveArrow: (show: boolean) => void;
-  onShowBrilliantModal: (move: AnalyzedMove) => void;
   whitePlayerName?: string;
   blackPlayerName?: string;
   onOpenSummaryModal?: () => void;
@@ -122,7 +120,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onToggleSound,
   showBestMoveArrow,
   onToggleShowBestMoveArrow,
-  onShowBrilliantModal,
   whitePlayerName = 'White',
   blackPlayerName = 'Black',
   onOpenSummaryModal,
@@ -359,19 +356,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     );
 
                     const renderMoveBadge = (analyzed?: AnalyzedMove) => {
-                      if (!analyzed) return null;
+                      if (!analyzed || analyzed.classification === 'brilliant') return null;
                       const symbolInfo = getClassificationSymbol(analyzed.classification);
                       if (!symbolInfo) return null;
 
                       return (
                         <span
-                          onClick={(e) => {
-                            if (analyzed.classification === 'brilliant') {
-                              e.stopPropagation();
-                              onShowBrilliantModal(analyzed);
-                            }
-                          }}
-                          className={`text-[9px] leading-tight px-1 py-0.5 rounded font-black shadow-xs transition-transform hover:scale-110 ml-1 inline-flex items-center justify-center min-w-[15px] text-center ${symbolInfo.badgeClass}`}
+                          className={`text-[9px] leading-tight px-1 py-0.5 rounded font-black shadow-xs ml-1 inline-flex items-center justify-center min-w-[15px] text-center ${symbolInfo.badgeClass}`}
                           title={`${symbolInfo.label}${analyzed.explanation ? `: ${analyzed.explanation}` : ''}`}
                           aria-label={symbolInfo.label}
                         >
@@ -616,7 +607,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="bg-[#1e1c18] border border-neutral-800 rounded-xl p-3 mb-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                <Gem className="w-3.5 h-3.5 text-[#26c2a3]" /> Teka-Teki Legendaris (Backend)
+                <Sparkles className="w-3.5 h-3.5 text-[#26c2a3]" /> Teka-Teki Legendaris (Backend)
               </span>
               <span className="text-[10px] text-neutral-500 font-mono">
                 {backendPuzzles.length} Tersedia
@@ -648,7 +639,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className="col-span-2 py-2 bg-[#26c2a3]/20 hover:bg-[#26c2a3]/30 border border-[#26c2a3]/50 text-[#26c2a3] font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
-                  <Gem className="w-4 h-4" /> Muat Greek Gift (Bxh7!!)
+                  <Sparkles className="w-4 h-4" /> Muat Greek Gift (Bxh7!)
                 </button>
               )}
             </div>
@@ -686,12 +677,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
 
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-[#262421] p-2 rounded-lg border border-[#26c2a3]/30 flex justify-between items-center">
-                  <span className="text-[#26c2a3] font-semibold flex items-center gap-1">
-                    <Gem className="w-3.5 h-3.5" /> Brilliant (!!)
+                <div className="bg-[#262421] p-2 rounded-lg border border-[#5c8bb0]/30 flex justify-between items-center">
+                  <span className="text-[#5c8bb0] font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" /> Great (!)
                   </span>
-                  <span className="font-mono font-bold text-[#26c2a3]">
-                    {analysisSummary.brilliant}
+                  <span className="font-mono font-bold text-[#5c8bb0]">
+                    {analysisSummary.great}
                   </span>
                 </div>
                 <div className="bg-[#262421] p-2 rounded-lg border border-neutral-800 flex justify-between items-center">

@@ -835,7 +835,7 @@ app.post('/api/cloud/leaderboard/record-match', async (req: Request, res: Respon
     existing = {
       id: `p-${Date.now()}`,
       player_name,
-      rating: 1200,
+      rating: 400,
       wins: 0,
       losses: 0,
       draws: 0,
@@ -1024,7 +1024,7 @@ app.post('/api/auth/signup', (req: Request, res: Response) => {
     password: String(password),
     name: String(name || cleanEmail.split('@')[0]),
     role: 'user', // Default safe user role
-    rating: 1200,
+    rating: 400,
     avatar: '♟️',
     status: 'active',
     matches_played: 0,

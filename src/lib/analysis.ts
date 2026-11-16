@@ -225,13 +225,14 @@ export function classifyMove(
   fenAfter: string,
   san: string,
   moveNumber: number,
-  analysisDepth: number = 2
+  analysisDepth: number = 2,
+  movetimeMs: number = 300
 ): AnalyzedMove {
   const chessBefore = new Chess(fenBefore);
   const isWhite = chessBefore.turn() === 'w';
 
-  // Find best move in previous position with fast analysis depth
-  const engineBest = findBestMove(chessBefore, analysisDepth);
+  // Find best move in previous position with fast bounded movetime (default 300ms)
+  const engineBest = findBestMove(chessBefore, analysisDepth, undefined, movetimeMs);
   const evalBefore = engineBest.evaluation;
 
   // Evaluate position after move
@@ -252,7 +253,7 @@ export function classifyMove(
   let classification: MoveClassification = 'good';
 
   if (isSacrifice && clampedLoss <= 0.35) {
-    classification = 'brilliant';
+    classification = 'great';
   } else if (isBook) {
     classification = 'book';
   } else if (actualMove.san === engineBest.bestMoveSan || clampedLoss <= 0.12) {

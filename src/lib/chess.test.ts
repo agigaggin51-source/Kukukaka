@@ -215,7 +215,13 @@ test('RBAC: Route Guard strictly permits admin and rejects regular users/guests'
   assert.equal(canAccessAdminDashboard(null, '#game'), true, 'Guest can access normal routes');
 });
 
-import { calculateEloOnWin } from './elo';
+import { calculateEloOnWin, DEFAULT_STARTING_ELO } from './elo';
+import { saveMatchToSupabase } from './matchHistory';
+
+test('Elo Calculation: new players start at 400 Elo and gain +50 on win', () => {
+  assert.equal(DEFAULT_STARTING_ELO, 400);
+  assert.equal(calculateEloOnWin(400), 450);
+});
 
 test('Elo Calculation: calculateEloOnWin awards +50 for beginner (Elo < 1000)', () => {
   assert.equal(calculateEloOnWin(800), 850);
@@ -237,5 +243,38 @@ test('Elo Calculation: calculateEloOnWin scales dynamically between 15 and 25 fo
   assert.equal(calculateEloOnWin(3000), 3015);
 });
 
+test('Match History: saveMatchToSupabase formats record safely with local cache fallback', async () => {
+  const result = await saveMatchToSupabase({
+    player1_id: 'usr-white-1',
+    player2_id: 'usr-black-2',
+    result: '1-0',
+    fen: 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1',
+    status: 'completed',
+    total_moves: 42,
+  });
 
+  assert.ok(result.success, 'saveMatchToSupabase must return success');
+  assert.equal(result.match.player1_id, 'usr-white-1');
+  assert.equal(result.match.player2_id, 'usr-black-2');
+  assert.equal(result.match.result, '1-0');
+  assert.ok(result.match.fen.length > 10);
+});
 
+test('UI Optimization: classifyMove never emits brilliant classification for sacrifices', () => {
+  // Queen sacrifice on f7/c6 or sharp tactical move should not return 'brilliant'
+  const c = new Chess('4kb1r/p2n1ppp/4q3/4p1B1/4P3/1Q6/PPP2PPP/2KR4 w k - 0 16');
+  const fenBefore = c.fen();
+  c.move('Qb8+');
+  const fenAfter = c.fen();
+  const analyzed = classifyMove(fenBefore, fenAfter, 'Qb8+', 16, 2, 300);
+  assert.notEqual(analyzed.classification, 'brilliant');
+});
+
+test('Engine movetime cap (300ms) keeps high-depth analysis responsive', () => {
+  const c = new Chess('r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2NP1N2/PPP2PPP/R1BQK2R w KQkq - 4 5');
+  const start = Date.now();
+  const res = findBestMove(c, 4, undefined, 300);
+  const elapsed = Date.now() - start;
+  assert.ok(res.bestMove.length >= 4, 'Must return a valid move');
+  assert.ok(elapsed < 1200, `Expected fast bounded search under 1200ms, took ${elapsed}ms`);
+});

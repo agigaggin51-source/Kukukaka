@@ -10,7 +10,6 @@ interface ChessBoardProps {
   themeId: BoardThemeId;
   onMakeMove: (from: Square, to: Square, promotion?: PieceSymbol) => boolean;
   lastMove?: { from: Square; to: Square } | null;
-  brilliantSquare?: Square | null;
   bestMove?: string | null;
   showBestMoveArrow?: boolean;
   disabled?: boolean;
@@ -39,7 +38,6 @@ interface SquareProps {
   isSelected: boolean;
   isLastMove: boolean;
   isCheck: boolean;
-  isBrilliant: boolean;
   isLegalMove: boolean;
   isCapture: boolean;
   canDrag: boolean;
@@ -60,7 +58,6 @@ const BoardSquare = memo<SquareProps>(({
   isSelected,
   isLastMove,
   isCheck,
-  isBrilliant,
   isLegalMove,
   isCapture,
   canDrag,
@@ -87,7 +84,6 @@ const BoardSquare = memo<SquareProps>(({
       {isLastMove && <div className="absolute inset-0 bg-yellow-400/35 pointer-events-none" />}
       {isSelected && <div className="absolute inset-0 bg-emerald-600/50 pointer-events-none" />}
       {isCheck && <div className="absolute inset-0 bg-red-600/60 animate-pulse pointer-events-none" />}
-      {isBrilliant && <div className="absolute inset-0 brilliant-square-highlight pointer-events-none" />}
 
       {/* Review Classification Floating Badge */}
       {reviewBadge && (
@@ -154,7 +150,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   themeId,
   onMakeMove,
   lastMove,
-  brilliantSquare,
   bestMove,
   showBestMoveArrow = true,
   disabled = false,
@@ -391,7 +386,6 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                 isSelected={selectedSquare === square}
                 isLastMove={!!lastMove && (lastMove.from === square || lastMove.to === square)}
                 isCheck={checkSquare === square}
-                isBrilliant={brilliantSquare === square}
                 isLegalMove={legalDests.has(square)}
                 isCapture={legalDests.get(square) === true}
                 canDrag={!disabled && !!piece && piece.color === currentTurn}

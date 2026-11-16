@@ -158,7 +158,7 @@ export async function getCurrentUser(): Promise<UserProfile | null> {
       name,
       role,
       avatar: meta.avatar || (role === 'admin' ? '🛡️' : '♟️'),
-      rating: meta.rating || 1500,
+      rating: meta.rating || 400,
       status: 'active',
     };
 
@@ -230,7 +230,7 @@ export async function signInWithEmail(email: string, password: string): Promise<
         name,
         role,
         avatar: meta.avatar || (role === 'admin' ? '🛡️' : '♟️'),
-        rating: meta.rating || 1500,
+        rating: meta.rating || 400,
         status: 'active',
       };
 
@@ -314,7 +314,7 @@ export async function signUpWithEmail(
         name,
         role: 'user',
         avatar: meta.avatar || '♟️',
-        rating: 1200,
+        rating: 400,
         status: 'active',
       };
 

@@ -32,7 +32,6 @@ const CLASSIFICATION_ROWS: {
   key: keyof AnalysisSummary['whiteBreakdown'];
   classification: MoveClassification;
 }[] = [
-  { key: 'brilliant', classification: 'brilliant' },
   { key: 'great', classification: 'great' },
   { key: 'best', classification: 'best' },
   { key: 'excellent', classification: 'excellent' },

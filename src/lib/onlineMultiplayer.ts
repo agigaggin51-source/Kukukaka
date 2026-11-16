@@ -318,13 +318,13 @@ export async function joinOnlineRoom(
 }
 
 /**
- * Broadcast move to the opponent
+ * Broadcast move to the opponent (Non-blocking with timeout protection to prevent board freezing)
  */
 export async function sendOnlineMove(payload: Omit<OnlineMovePayload, 'senderId'>): Promise<boolean> {
   if (!currentSession || !currentSession.channel) return false;
 
   try {
-    const res = await currentSession.channel.send({
+    const sendPromise = currentSession.channel.send({
       type: 'broadcast',
       event: 'game-move',
       payload: {
@@ -332,9 +332,20 @@ export async function sendOnlineMove(payload: Omit<OnlineMovePayload, 'senderId'
         senderId: currentSession.myPlayerId,
       },
     });
+
+    // Guard with 2500ms timeout so connection delays never freeze or lock board interaction
+    const timeoutPromise = new Promise<'timeout'>((resolve) =>
+      setTimeout(() => resolve('timeout'), 2500)
+    );
+
+    const res = await Promise.race([sendPromise, timeoutPromise]);
+    if (res === 'timeout') {
+      console.warn('[Realtime Online] Broadcast langkah memakan waktu lama, melanjutkan rendering lokal tanpa blokir.');
+      return false;
+    }
     return res === 'ok';
   } catch (err) {
-    console.warn('Failed to broadcast online move:', err);
+    console.warn('[Realtime Online] Gagal mengirim broadcast langkah:', err);
     return false;
   }
 }
