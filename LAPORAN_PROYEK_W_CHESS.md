@@ -31,13 +31,13 @@ Untuk mengatasi permasalahan tersebut, proyek **"W Chess"** dikembangkan sebagai
 Tujuan utama dari pengembangan proyek aplikasi web W Chess adalah:
 1. Membangun antarmuka catur 2D bertema klasik (*Staunton Style*) yang bersih, berestetika tinggi, dan sangat nyaman dibaca di layar HP maupun monitor komputer.
 2. Mengintegrasikan mesin catur legendaris **Stockfish 16** dengan optimasi logika taktik agar bot langsung mengeksekusi skakmat saat posisi menang.
-3. Menyediakan fitur **Game Review instan** (selesai dalam 2–3 detik) dengan metrik persentase akurasi (%) dan klasifikasi langkah (*Brilliant*, *Great*, *Best*, *Inaccuracy*, *Mistake*, *Blunder*).
-4. Menyediakan fitur **Multiplayer Online 1v1 Real-time** dengan sistem kode room (*room code*) menggunakan **Supabase Realtime WebSocket Channels**.
-5. Menerapkan kontrol akses berbasis peran (**Role-Based Access Control / RBAC**) yang memisahkan hak akses antara **Administrator** dan **Regular User** dengan perlindungan **Row Level Security (RLS)** di Supabase dan **Route Guard** di sisi frontend.
+3. Menyediakan fitur **Game Review cepat** (batas waktu evaluasi `movetime 300ms`) dengan metrik persentase akurasi (%) dan klasifikasi langkah (*Great*, *Best*, *Excellent*, *Good*, *Inaccuracy*, *Mistake*, *Blunder*).
+4. Menyediakan fitur **Multiplayer Online 1v1 Real-time** dengan sistem kode room (*room code*) menggunakan **Supabase Realtime WebSocket Channels**, dilengkapi optimasi anti-lag (menonaktifkan evaluasi mesin real-time saat duel 1v1 berlangsung).
+5. Menerapkan **Sistem Rating Elo Live** (mulai dari **400 Elo**, `+50` per kemenangan di bawah `1000 Elo`, dan penyesuaian dinamis `+15` hingga `+25` poin pada `1000+ Elo`) serta kontrol akses berbasis peran (**RBAC**) antara **Administrator** dan **Regular User** dengan perlindungan **Row Level Security (RLS)** di Supabase dan **Route Guard** di sisi frontend.
 
 ### 2.3 Batasan Masalah
-- Aplikasi dibangun dalam bentuk Single Page Application (SPA) berbasis React dan TypeScript.
-- Basis data dan otentikasi menggunakan layanan Supabase Cloud (PostgreSQL 15) dengan *fallback in-memory mirror* di backend Node.js untuk menjamin keandalan tanpa henti (*zero-downtime*).
+- Aplikasi dibangun dalam bentuk Single Page Application (SPA) berbasis React 19 dan TypeScript.
+- Basis data dan otentikasi menggunakan layanan Supabase Cloud (PostgreSQL 15) dengan cadangan lokal (*local cache / in-memory mirror*) di browser dan backend Node.js untuk menjamin keandalan tanpa henti.
 - Engine catur dijalankan melalui arsitektur multi-thread Web Worker di sisi peramban klien agar tidak membebani komputasi server.
 
 ---
@@ -65,25 +65,28 @@ Tujuan utama dari pengembangan proyek aplikasi web W Chess adalah:
 * **Pilihan Level Kesulitan**: Level 1 (Pemula) hingga Level 5 (Grandmaster).
 * **Perbaikan Logika Endgame**: Mengatasi masalah langkah berulang (*shuffle loop*) pada bot dengan menerapkan penjelajahan taktik skakmat (*forced mate check*). Ketika evaluasi posisi telah unggul signifikan (di atas +5.0 atau *mate in N*), bot memprioritaskan penyudutan raja lawan dan eksekusi skakmat instan.
 
-### 3.5 Game Review & Analisis Catur Cepat (Instan 2–3 Detik)
-* **Analisis Cepat**: Kedalaman analisis pasca-pertandingan dioptimalkan (kedalaman *fast depth* 8–10 per langkah atau maksimal 50ms per langkah) sehingga evaluasi seluruh laga tuntas dalam waktu 2–3 detik.
-* **Evaluasi Berbasis Cache**: Menggunakan data evaluasi yang sudah dihitung selama permainan berlangsung (*live evaluation cache*) untuk menghindari kalkulasi ulang dari awal.
+### 3.5 Game Review & Analisis Catur Cepat (`movetime 300ms`)
+* **Antarmuka Bersih Bebas Gangguan**: Pop-up notifikasi dan badge animasi *"Brilliant (!!)"* telah dinonaktifkan sehingga papan catur tetap fokus dan nyaman dilihat.
+* **Analisis Cepat**: Kedalaman analisis pasca-pertandingan dibatasi waktu pencarian maksimal `300ms` per posisi (*fast movetime cap*) dan memanfaatkan *live evaluation cache* sehingga ulasan laga muncul cepat setelah pertandingan selesai.
 * **Indikator Progres**: Menampilkan persentase dan progres langkah berjalan (contoh: *"Menganalisis langkah 14/38..."*).
 * **Metrik Akurasi & Klasifikasi Langkah**: Menampilkan persentase akurasi pemain Putih dan Hitam, kurva momentum keunggulan (*Advantage Swing Curve*), serta klasifikasi langkah:
-  * 💎 **Brilliant (!!)**: Pengorbanan perwira cerdas yang menghasilkan posisi menang mutlak.
-  * 🟢 **Great (!)**: Satu-satunya langkah terbaik yang mempertahankan inisiatif.
+  * 🟢 **Great (!)**: Langkah taktis krusial atau pengorbanan efektif yang mempertahankan inisiatif unggul.
   * ★ **Best**: Langkah terkuat rekomendasi engine.
+  * 🔵 **Excellent (!?)**: Langkah sangat baik yang mendekati pilihan utama engine.
+  * ✓ **Good**: Langkah solid dan aman.
   * 🟡 **Inaccuracy (?!)**: Langkah suboptimal yang sedikit mengurangi keunggulan.
   * 🟠 **Mistake (?)**: Langkah salah yang membuang tempo atau posisi.
   * 🔴 **Blunder (??)**: Kesalahan fatal yang membalikkan hasil pertandingan.
 
-### 3.6 Mode Multiplayer Online 1v1 Real-time (Supabase Realtime)
+### 3.6 Mode Multiplayer Online 1v1 Real-time & Optimasi Anti-Lag
 * **Kode Room Unik**: Pemain dapat membuat room baru dengan kode room instan (contoh: `WCH-8K2M`) atau bergabung ke room teman dengan memasukkan kode.
-* **Sinkronisasi Dua Arah Tanpa Lag**: Pergerakan bidak disinkronkan secara langsung melalui kanal *Supabase Broadcast Channel*.
+* **Sinkronisasi Dua Arah Tanpa Freeze**: Pergerakan bidak disinkronkan secara langsung melalui kanal *Supabase Broadcast Channel* dengan proteksi timeout serta pemulihan otomatis berbasis FEN jika terjadi selisih sinkronisasi.
+* **Optimasi Anti-Lag 1v1**: Evaluasi mesin Stockfish real-time dinonaktifkan otomatis selama pertandingan 1v1 berlangsung agar pergerakan bidak ringan dan instan, lalu baru aktif saat masuk mode AI atau pasca-pertandingan (*Review*).
+* **Sistem Rating Elo Live**: Pemain baru memulai dari **400 Elo**. Kemenangan pada Elo `< 1000` memberi **+50 Elo**, sedangkan pada `1000+ Elo` bertambah dinamis antara **+15 hingga +25 poin**, lalu langsung disimpan ke tabel `profiles` di Supabase.
 * **Jam Catur Sinkron & Deteksi Selesai**: Penghitung waktu (*clock timer*) kedua pemain berjalan sinkron, lengkap dengan deteksi otomatis skakmat (*Checkmate*), waktu habis (*Flagged*), remis (*Draw*), dan opsi Menyerah (*Resign*) atau Tanding Ulang (*Rematch*).
 
 ### 3.7 Fitur Pendukung Lainnya
-* **Teka-teki Taktik Grandmaster (Puzzle Trainer)**: Kumpulan studi taktik klasik dunia seperti *Morphy Opera Game (Qb8+!!)*, *Boden's Mate*, *Philidor's Mate*, dan *Game of the Century*.
+* **Teka-teki Taktik Grandmaster (Puzzle Trainer)**: Kumpulan studi taktik klasik dunia seperti *Morphy Opera Game (Qb8+)*, *Boden's Mate*, *Philidor's Mate*, dan *Game of the Century*.
 * **Editor Papan (Board Editor)**: Membantu pengguna menyusun posisi bidak bebas dan mengekspor/mengimpor kode FEN (*Forsyth-Edwards Notation*).
 * **Ekspor Dokumen PGN**: Mengunduh catatan notasi pertandingan resmi lengkap dengan tag FIDE Tournament.
 
@@ -95,11 +98,11 @@ Tujuan utama dari pengembangan proyek aplikasi web W Chess adalah:
 ```
 +-----------------------------------------------------------------------+
 |                           KLIEN (FRONTEND)                            |
-|  React 18 SPA + TypeScript + Vite + Tailwind CSS + Lucide Icons       |
+|  React 19 SPA + TypeScript + Vite 8 + Tailwind CSS + Lucide Icons     |
 |                                                                       |
 |  +--------------------+  +-------------------+  +-------------------+ |
 |  |     ChessBoard     |  |   Engine Worker   |  |   Supabase SDK    | |
-|  |  (Staunton Vector) |  |   (Stockfish 16)  |  |  (Auth & Realtime)| |
+|  |  (Staunton Vector) |  |  (Stockfish Logic)|  |  (Auth & Realtime)| |
 |  +--------------------+  +-------------------+  +-------------------+ |
 |            |                       |                      |           |
 +------------|-----------------------|----------------------|-----------+
@@ -127,10 +130,10 @@ Tujuan utama dari pengembangan proyek aplikasi web W Chess adalah:
 ### 4.2 Rincian Teknologi
 | Komponen | Teknologi | Keterangan & Peran |
 | :--- | :--- | :--- |
-| **User Interface (UI)** | React 18, Tailwind CSS | Membangun antarmuka modular, modern, responsif, dan bebas gaya usang (*zero-pill*). |
+| **User Interface (UI)** | React 19, Tailwind CSS | Membangun antarmuka modular, modern, responsif, dan bebas gangguan visual. |
 | **Bahasa Pemrograman** | TypeScript, JavaScript ES6+ | Memberikan *type-safety* tinggi, meminimalkan *runtime error*, dan kode bersih. |
-| **Build Tool & Bundler** | Vite 6 | Memungkinkan kompilasi cepat dan performa aset ringan. |
-| **Logic & Engine Catur** | `chess.js`, Stockfish 16 Web Worker | Validasi aturan langkah resmi FIDE, deteksi skak/skakmat/remis, dan kalkulasi evaluasi langkah. |
+| **Build Tool & Bundler** | Vite 8 | Memungkinkan kompilasi cepat dan performa aset ringan. |
+| **Logic & Engine Catur** | `chess.js`, Engine Web Worker | Validasi aturan langkah resmi FIDE, deteksi skak/skakmat/remis, dan kalkulasi evaluasi langkah dengan `movetime 300ms`. |
 | **Database & Auth** | Supabase (PostgreSQL 15) | Penyimpanan relasional tabel `profiles` dan `matches` dengan enkripsi kata sandi dan token JWT. |
 | **Realtime Channel** | Supabase Realtime (WebSockets) | Mengalirkan data langkah catur 1v1 secara instan dengan latensi di bawah 50 milidetik. |
 | **Keamanan Data** | Row Level Security (RLS) & RBAC | Mengisolasi hak akses data antar user dan mengunci endpoint administratif. |
@@ -161,19 +164,19 @@ Tujuan utama dari pengembangan proyek aplikasi web W Chess adalah:
 1. Setelah pertandingan berakhir (atau kapan pun pemain menekan tombol **"Game Review"**), sistem memulai evaluasi.
 2. Algoritma menelusuri riwayat langkah:
    - Langkah yang sudah memiliki nilai evaluasi langsung diambil dari *live cache*.
-   - Langkah yang belum dievaluasi diproses menggunakan *fast search depth* (maksimal 50ms per move).
-3. Sistem menghitung selisih kehilangan keunggulan (*centipawn loss*) untuk menentukan klasifikasi langkah (*Brilliant*, *Great*, *Best*, *Inaccuracy*, *Blunder*).
+   - Langkah yang belum dievaluasi diproses menggunakan pencarian cepat berbatas waktu (`movetime 300ms`).
+3. Sistem menghitung selisih kehilangan keunggulan (*centipawn loss*) untuk menentukan klasifikasi langkah (*Great*, *Best*, *Excellent*, *Good*, *Inaccuracy*, *Mistake*, *Blunder*).
 4. Menghitung persentase akurasi pemain Putih dan Hitam (skala 0–100%).
-5. Modal ulasan interaktif terbuka dalam waktu 2–3 detik, memungkinkan pengguna melompat ke momen kunci pertandingan (*Key Moments*).
+5. Modal ulasan interaktif terbuka secara cepat dengan hasil akurasi dan momen kunci (*Key Moments*).
 
 ### 5.4 Alur Permainan Multiplayer Online 1v1 Real-time
 1. **Pemain 1 (Host)** membuka menu **"Main Online (1v1)"** dan menekan tombol **"Buat Room Baru"**.
 2. Sistem menghasilkan kode unik (contoh: `WCH-8K2M`) dan menghubungkan Pemain 1 ke kanal WebSocket Supabase Realtime dengan peran Putih (*White*).
 3. **Pemain 2 (Tamu)** memasukkan kode room tersebut pada kolom **"Gabung Room"**.
-4. Kanal mendeteksi kehadiran dua pemain dan memulai pertandingan secara otomatis.
-5. Setiap kali salah satu pemain melangkah, muatan data langkah (*from*, *to*, *promotion*, *fen*) disiarkan via `broadcast` event.
+4. Kanal mendeteksi kehadiran dua pemain dan memulai pertandingan secara otomatis, sementara evaluasi Stockfish real-time dinonaktifkan agar permainan berjalan ringan tanpa lag.
+5. Setiap kali salah satu pemain melangkah, muatan data langkah (*from*, *to*, *promotion*, *fen*) disiarkan via `broadcast` event dengan mekanisme timeout & pemulihan FEN.
 6. Papan lawan langsung bergerak sinkron secara *real-time* tanpa perlu menyegarkan (*refresh*) halaman.
-7. Bila terjadi skakmat, pemain menyerah (*resign*), atau waktu habis, status hasil pertandingan segera diperbarui di kedua perangkat.
+7. Bila terjadi skakmat, pemain menyerah (*resign*), atau waktu habis, status hasil pertandingan (`matches`) dan pembaruan Live Elo (`profiles`) otomatis disimpan ke Supabase.
 
 ### 5.5 Alur Perlindungan Rute (Route Guard & Security Audit)
 1. Pengguna (tamu atau berstatus *role: 'user'*) mencoba mengakses rute admin dengan mengetik `/#admin` pada URL peramban.
@@ -195,12 +198,13 @@ Untuk memenuhi persyaratan basis data relasional, sistem W Chess menggunakan min
 | PK | id (UUID)                   |<---+         | PK | id (UUID)                   |
 |    | email (TEXT, UNIQUE)         |    |         | FK | player1_id (UUID) ----------+ (White)
 |    | full_name (TEXT)             |    +---------| FK | player2_id (UUID) ----------+ (Black)
-|    | role ('admin' | 'user')      |             |    | result (TEXT: '1-0','0-1'..) |
-|    | rating (INTEGER)             |             |    | fen_string (TEXT)            |
-|    | avatar (TEXT)                |             |    | pgn (TEXT)                   |
-|    | status ('active' | 'banned') |             |    | time_control (TEXT)          |
-|    | matches_played (INTEGER)     |             |    | mode (TEXT)                  |
-|    | created_at (TIMESTAMPTZ)     |             |    | total_moves (INTEGER)        |
+|    | role ('admin' | 'user')      |             |    | status ('ongoing'|'completed')|
+|    | rating (INT, DEFAULT 400)    |             |    | result (TEXT: '1-0','0-1'..) |
+|    | avatar (TEXT)                |             |    | fen / fen_string (TEXT)      |
+|    | status ('active' | 'banned') |             |    | pgn (TEXT)                   |
+|    | matches_played (INTEGER)     |             |    | time_control (TEXT)          |
+|    | created_at (TIMESTAMPTZ)     |             |    | mode (TEXT)                  |
+|    | updated_at (TIMESTAMPTZ)     |             |    | total_moves (INTEGER)        |
 |    | last_login (TIMESTAMPTZ)     |             |    | notes (TEXT)                 |
 +-----------------------------------+             |    | created_at (TIMESTAMPTZ)     |
                                                   +-----------------------------------+
@@ -217,10 +221,10 @@ Untuk memenuhi persyaratan basis data relasional, sistem W Chess menggunakan min
 
 ### 7.1 Kesimpulan
 Proyek pengembangan aplikasi web catur **W Chess** telah berhasil diselesaikan dengan memenuhi seluruh kriteria fungsional, performa, dan standar keamanan yang ditargetkan:
-1. **Desain & Responsivitas Unggul**: Desain bidak klasik Staunton 2D dan move list berkontras tinggi terbukti nyaman digunakan di perangkat layar sentuh ponsel maupun desktop.
+1. **Desain & Responsivitas Unggul**: Desain bidak klasik Staunton 2D, move list berkontras tinggi, serta antarmuka bersih tanpa pop-up pengganggu terbukti nyaman digunakan di perangkat layar sentuh ponsel maupun desktop.
 2. **Kecerdasan Buatan yang Efektif**: Integrasi engine Stockfish dengan perbaikan logika endgame berhasil mengeliminasi masalah gerakan berulang (*shuffle*), memastikan eksekusi skakmat yang cepat dan akurat.
-3. **Efisiensi Game Review**: Penerapan *cache* evaluasi langsung berhasil memangkas waktu analisis dari puluhan detik menjadi hanya 2–3 detik tanpa mengurangi ketepatan klasifikasi langkah (*Brilliant/Great/Blunder*).
-4. **Komunikasi Real-time yang Andal**: Sinkronisasi pertandingan 1v1 via Supabase Realtime Channels berjalan mulus dengan latensi minimal.
+3. **Efisiensi Game Review**: Penerapan *cache* evaluasi langsung dan pembatasan `movetime 300ms` membuat analisis pasca-laga berjalan cepat tanpa membebani browser (*Great/Best/Blunder*).
+4. **Komunikasi Real-time Anti-Lag**: Sinkronisasi pertandingan 1v1 via Supabase Realtime Channels berjalan ringan karena analisis Stockfish real-time dinonaktifkan selama duel berlangsung, dilengkapi sistem Live Elo mulai dari 400 poin dan penyimpanan riwayat otomatis ke tabel `matches`.
 5. **Keamanan Data yang Ketat**: Pembagian peran Administrator dan User terlindungi dengan baik melalui kombinasi *Row Level Security* (RLS) di level basis data dan *Route Guard (403 Forbidden)* di level aplikasi.
 
 ### 7.2 Saran & Rencana Pengembangan Masa Depan

@@ -1307,7 +1307,7 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#161512] text-[#bababa] flex flex-col justify-between selection:bg-[#81b64c] selection:text-black">
       {/* Header Navigation */}
-      <header className="bg-[#262421] border-b border-neutral-800 px-3 sm:px-5 py-2.5 flex items-center justify-between gap-3 shadow-md">
+      <header className="bg-[#262421] border-b border-neutral-800 px-3 sm:px-5 py-2.5 flex flex-wrap lg:flex-nowrap items-center justify-between gap-2 sm:gap-3 shadow-md">
         <div className="flex items-center gap-2.5 shrink-0">
           <div className="flex items-center gap-2 font-black text-xl tracking-wide text-white whitespace-nowrap">
             <span className="w-8 h-8 rounded-lg bg-[#81b64c] text-[#1c3308] flex items-center justify-center font-bold text-lg shadow shrink-0">
@@ -1323,7 +1323,7 @@ export default function App() {
         </div>
 
         {/* Mode Select Buttons */}
-        <div className="flex items-center gap-1 sm:gap-1.5 bg-[#1e1c18] p-1 rounded-xl border border-neutral-800 overflow-x-auto min-w-0">
+        <div className="order-3 lg:order-2 w-full lg:w-auto flex items-center gap-1 sm:gap-1.5 bg-[#1e1c18] p-1 rounded-xl border border-neutral-800 overflow-x-auto min-w-0">
           <button
             onClick={() => {
               setIsOnlineLobbyOpen(true);
@@ -1413,11 +1413,11 @@ export default function App() {
           </button>
         </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+        <div className="order-2 lg:order-3 flex items-center gap-1 sm:gap-2 shrink-0">
           {/* Supabase Cloud Storage Button */}
           <button
             onClick={() => setIsCloudModalOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer"
+            className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 transition cursor-pointer"
             title="Buka Supabase Cloud Storage (Simpan & Muat Permainan)"
           >
             <Cloud className="w-3.5 h-3.5" />
@@ -1428,7 +1428,7 @@ export default function App() {
           {/* Tournament Leaderboard Button */}
           <button
             onClick={() => setIsLeaderboardOpen(true)}
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition cursor-pointer"
+            className="px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1.5 transition cursor-pointer"
             title="Buka Papan Peringkat Turnamen"
           >
             <Trophy className="w-3.5 h-3.5" />
@@ -1439,8 +1439,8 @@ export default function App() {
           <button
             onClick={() => handleRunFullAnalysis(true)}
             disabled={historySans.length === 0}
-            className="px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-[#81b64c]/20 to-[#26c2a3]/20 hover:from-[#81b64c]/30 hover:to-[#26c2a3]/30 disabled:opacity-40 text-white border border-[#81b64c]/40 flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
-            title="Buka Game Review & Analisis Akurasi ala Chess.com"
+            className="px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-[#81b64c]/20 to-[#26c2a3]/20 hover:from-[#81b64c]/30 hover:to-[#26c2a3]/30 disabled:opacity-40 text-white border border-[#81b64c]/40 flex items-center gap-1.5 transition cursor-pointer shadow-sm active:scale-95"
+            title="Buka Game Review & Analisis Akurasi"
           >
             <Sparkles className="w-3.5 h-3.5 text-[#26c2a3]" />
             <span className="hidden sm:inline">Game</span> Review

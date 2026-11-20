@@ -21,11 +21,12 @@ create table public.profiles (
   email text unique not null,
   full_name text not null,
   role text not null default 'user' check (role in ('admin', 'user')),
-  rating integer default 1200 check (rating >= 100 and rating <= 3500),
+  rating integer default 400 check (rating >= 100 and rating <= 3500),
   avatar text default '♟️',
   status text not null default 'active' check (status in ('active', 'banned')),
   matches_played integer default 0 check (matches_played >= 0),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  updated_at timestamp with time zone default timezone('utc'::text, now()),
   last_login timestamp with time zone default timezone('utc'::text, now())
 );
 
@@ -39,11 +40,13 @@ create table public.matches (
   id uuid primary key default gen_random_uuid(),
   player1_id uuid not null references public.profiles(id) on delete cascade,
   player2_id uuid not null references public.profiles(id) on delete cascade,
+  status text not null default 'completed' check (status in ('ongoing', 'completed', 'abandoned')),
   result text not null check (result in ('1-0', '0-1', '1/2-1/2', '*')),
+  fen text,
   fen_string text not null,
   pgn text,
   time_control text default '5+0',
-  mode text default 'standard' check (mode in ('standard', 'vs-ai', 'online-multiplayer', 'analysis', 'puzzle-trainer')),
+  mode text default 'standard' check (mode in ('standard', 'vs-ai', 'online-1v1', 'online-multiplayer', 'analysis', 'puzzle-trainer')),
   total_moves integer default 0,
   notes text,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null
@@ -65,32 +68,44 @@ create index idx_profiles_role on public.profiles(role);
 alter table public.profiles enable row level security;
 alter table public.matches enable row level security;
 
+-- Fungsi pembantu anti-rekursi untuk mengecek apakah user saat ini adalah admin
+create or replace function public.is_admin()
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.profiles
+    where id = auth.uid() and role = 'admin'
+  );
+$$;
+
 -- --- KEBIJAKAN KEAMANAN TABEL PROFILES ---
 
--- Policy 1: Publik dan Pengguna dapat melihat daftar profil untuk papan peringkat & pertandingan
-create policy "Profiles: Public read access for leaderboard and players"
+-- Policy 1: User biasa hanya boleh melihat profil user reguler (atau profilnya sendiri),
+-- sedangkan data admin terlindungi dan hanya bisa diakses oleh sesama admin atau service backend
+create policy "Profiles: Regular users cannot view admin data"
   on public.profiles for select
-  using (true);
+  using (
+    role <> 'admin' or auth.uid() = id or public.is_admin() or auth.uid() is null
+  );
 
--- Policy 2: User hanya boleh memperbarui data profil miliknya sendiri (nama, avatar)
+-- Policy 2: User hanya boleh memperbarui data profil miliknya sendiri (nama, avatar, rating)
 -- dan dilarang mengubah kolom 'role' menjadi admin secara sepihak
 create policy "Profiles: Users can update their own personal info"
   on public.profiles for update
   using (auth.uid() = id or auth.uid() is null)
   with check (
     -- Cegah user biasa menaikkan perannya sendiri menjadi admin
-    (role = 'user') or 
-    (exists (select 1 from public.profiles where id = auth.uid() and role = 'admin'))
+    (role = 'user') or public.is_admin() or auth.uid() is null
   );
 
 -- Policy 3: Hanya akun dengan role 'admin' yang dapat menghapus akun pengguna
 create policy "Profiles: Only administrators can delete users"
   on public.profiles for delete
   using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    ) or auth.uid() is null -- izinkan via service backend
+    public.is_admin() or auth.uid() is null
   );
 
 -- --- KEBIJAKAN KEAMANAN TABEL MATCHES ---
@@ -111,10 +126,7 @@ create policy "Matches: Authenticated players can insert their matches"
 create policy "Matches: Admins can update or delete matches"
   on public.matches for all
   using (
-    exists (
-      select 1 from public.profiles
-      where id = auth.uid() and role = 'admin'
-    ) or auth.uid() is null
+    public.is_admin() or auth.uid() is null
   );
 
 -- ==============================================================================
